@@ -1,0 +1,103 @@
+---
+title: "Pegando dados de ações, ibovespa e da selic pelo R e rodando um CAPM"
+author: "José Bonifácio de A. Júnior"
+date: "5/29/2018"
+output: html_document
+---
+
+
+## Setup inicial, carregando pacotes
+
+```{r, message=FALSE,echo=T}
+# limpando a memória
+rm(list=ls())
+
+# carregando pacotes
+library(quantmod) # cotações das ações e do Ibov
+library(Quandl) # Selic BACEN
+library(ggplot2) # para gerar os gráficos
+library(gridExtra) # para vaios graficos juntos
+library(lmtest) # testes: breusch-godfrey, breuch-pagan
+library(tseries) # jarque-bera test
+
+```
+
+## Pegando os dados
+```{r, message=FALSE,echo=T}
+# pegando cotações mensais da petrobras e do ibovespa
+getSymbols(c("PETR4.SA","^BVSP"),
+           periodicity='monthly', 
+           from='2000-01-01',
+           to='2018-05-01'
+           )
+```
+
+
+## Checando a periodicidade
+
+```{r, message=FALSE, echo=T}
+periodicity(PETR4.SA)
+periodicity(BVSP)
+```
+
+
+## Gerando gráficos de cotações
+
+```{r, message=FALSE, echo=T}
+# petr4 
+ g1 <-  ggplot(PETR4.SA, aes(time(PETR4.SA), PETR4.SA$PETR4.SA.Adjusted)) + geom_line() +
+    scale_x_date(date_labels =  "%m/%Y", date_breaks = "1 year", 
+    limits=c(min(time(PETR4.SA)),max(time(PETR4.SA)))) +
+    xlab("") + ylab("PETR4") +
+    theme(axis.text.x = element_text(angle = 90, hjust = 1))
+  # ibov
+  g2 <- ggplot(BVSP, aes(time(BVSP), BVSP$BVSP.Adjusted)) + geom_line() +
+    scale_x_date(date_labels =  "%m/%Y", date_breaks = "1 year", 
+    limits=c(min(time(BVSP)),max(time(BVSP)))) +
+    xlab("") + ylab("BVSP") +
+    theme(axis.text.x = element_text(angle = 90, hjust = 1))
+
+  # os dois graficos de cotacoes juntos  
+  grid.arrange(g1, g2, nrow = 2)
+
+```
+
+
+  
+```{r, message=F,echo=T}
+ # calculando retornos mensais petr4 e ibov com base no preço ajustado
+dados <- merge(monthlyReturn(PETR4.SA[,6],type='log')[-1,], 
+               monthlyReturn(BVSP[,6],type="log")[-1,]
+               )
+
+# pegando a taxa selic mensal
+Quandl.api_key('TC1ow5j6G7s4SFHTzgDz') # set your API key = Comando necessário pra acessar o Quandl
+selic <- Quandl("BCB/4390",type = 'xts') # importando a serie do selic do Bacen
+
+# juntando os dados petr4, ibov e selic
+dados <- merge(dados,as.xts(selic/100),join="inner")
+
+# renomeando as colunas
+names(dados) <- c("petr4","ibov","selic")
+
+# plotando selic mensal
+ggplot(dados, aes(time(dados), dados$selic)) + geom_line() +
+  scale_x_date(date_labels =  "%m/%Y", date_breaks = "1 year", 
+               limits=c(min(time(dados)),max(time(dados)))) +
+  xlab("") + ylab("Selic") +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1))
+```
+
+
+## Plotando os retornos
+
+```{r, message=F,echo=T}
+library(ggplot2)
+ggplot(dados, aes(time(dados), petr4)) + geom_line() +
+  scale_x_date(date_labels =  "%m/%Y", date_breaks = "1 year", limits=c(min(time(dados)),max(time(dados)))) +
+  xlab("") + ylab("%") +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1))
+``` 
+
+
+
