@@ -5,7 +5,7 @@ date: "5/29/2018"
 output: html_document
 ---
 
-
+ 
 ## Setup inicial, carregando pacotes
 
 ```{r, message=FALSE,echo=T}
@@ -36,7 +36,9 @@ getSymbols(c("PETR4.SA","^BVSP"),
 ## Checando a periodicidade
 
 ```{r, message=FALSE, echo=T}
+# Checando a periodicidade dos dados da petrobras
 periodicity(PETR4.SA)
+# Checando a periodicidade dos dados do ibovespa
 periodicity(BVSP)
 ```
 
@@ -44,7 +46,8 @@ periodicity(BVSP)
 ## Gerando gráficos de cotações
 
 ```{r, message=FALSE, echo=T}
-# petr4 
+# Gerando gráficos de cotações
+ # petr4 
  g1 <-  ggplot(PETR4.SA, aes(time(PETR4.SA), PETR4.SA$PETR4.SA.Adjusted)) + geom_line() +
     scale_x_date(date_labels =  "%m/%Y", date_breaks = "1 year", 
     limits=c(min(time(PETR4.SA)),max(time(PETR4.SA)))) +
@@ -56,14 +59,13 @@ periodicity(BVSP)
     limits=c(min(time(BVSP)),max(time(BVSP)))) +
     xlab("") + ylab("BVSP") +
     theme(axis.text.x = element_text(angle = 90, hjust = 1))
-
   # os dois graficos de cotacoes juntos  
   grid.arrange(g1, g2, nrow = 2)
 
 ```
 
 
-  
+## Montando a base de dados com retornos e pegando dados da Selic mensal
 ```{r, message=F,echo=T}
  # calculando retornos mensais petr4 e ibov com base no preço ajustado
 dados <- merge(monthlyReturn(PETR4.SA[,6],type='log')[-1,], 
@@ -79,8 +81,12 @@ dados <- merge(dados,as.xts(selic/100),join="inner")
 
 # renomeando as colunas
 names(dados) <- c("petr4","ibov","selic")
+```
 
-# plotando selic mensal
+
+## Plotando a Selic mensal
+```{r, message=F}
+# plotando a selic
 ggplot(dados, aes(time(dados), dados$selic)) + geom_line() +
   scale_x_date(date_labels =  "%m/%Y", date_breaks = "1 year", 
                limits=c(min(time(dados)),max(time(dados)))) +
@@ -89,15 +95,63 @@ ggplot(dados, aes(time(dados), dados$selic)) + geom_line() +
 ```
 
 
-## Plotando os retornos
+## Plotando os retornos da petr4 e ibovespa
 
 ```{r, message=F,echo=T}
-library(ggplot2)
+# petr4
 ggplot(dados, aes(time(dados), petr4)) + geom_line() +
   scale_x_date(date_labels =  "%m/%Y", date_breaks = "1 year", limits=c(min(time(dados)),max(time(dados)))) +
-  xlab("") + ylab("%") +
+  xlab("") + ylab("PETR4") +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1))
+
+# ibov
+ggplot(dados, aes(time(dados), ibov)) + geom_line() +
+  scale_x_date(date_labels =  "%m/%Y", date_breaks = "1 year", 
+               limits=c(min(time(dados)),max(time(dados)))) +
+  xlab("") + ylab("IBOV") +
   theme(axis.text.x = element_text(angle = 90, hjust = 1))
 ``` 
+
+##  Estimando a regressão do CAPM
+```{r, message=F,echo=T}
+# estimando o modelo de regressão do CAPM
+mod1 <- lm(I(petr4 - selic) ~ I(ibov - selic), data=dados)
+# mostrando os resultados
+summary(mod1)
+```
+O beta de 1.18, estatísticamente significativo, indica que uma variação de 1% no retorno em excesso do Ibovespa, seria acompanhado por uma variação de 1.18% no retorno (esperado) em excesso da Petrobrás.
+
+O Alfa de Jensen deu positivo mas não estatisticamente significativo, de acordo com o esperado, segundo a EMH (Hipótese de Mercado Eficiente)
+
+# Plotando o diagrama de dispersão e a reta de regressão
+
+```{r,message=F}
+# Plotando o diagrama de dispersão e a reta de regressão linear
+ggplot(dados, aes(x=(ibov-selic), y=(petr4-selic))) + geom_point() + geom_smooth(method=lm, se=FALSE)
+```
+
+# Testando se há autocorrelação nos resíduos da regressão estimada (Breuch-Godfrey)
+```{r,message=F}
+# autocorrelação
+bgtest(mod1)
+```
+Como hipótese nula de não existência de autocorrelação foi rejeitada, existem evidência de um problema de autocorrelação nos resíduos dessa regressão. 
+
+
+# Testando se os resíduos da regressão estimada são homocedásticos (Breuch-Pagan)
+```{r,message=F}
+# heteroscedasticidade
+bptest(mod1)
+```
+O resultado do teste de heteroscedasticidade Breuch-Pagan mostra que não se pode rejeitar a hipótese nula de homocedasticidade dos resíduos, assim, não há evidência de heteroscedasticidade nos resíduos dessa regressão.
+
+
+# Testando se os resíduos são normais
+```{r,message=F}
+jarque.bera.test(mod1$residuals)
+```
+O teste de normalidade Jarque-Bera mostra evidência de não normalidade dos resíduos.
+
 
 
 
